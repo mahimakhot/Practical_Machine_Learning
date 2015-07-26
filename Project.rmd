@@ -1,0 +1,122 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Mahima Khot"
+date: "Sunday, July 26, 2015"
+output: html_document
+---
+
+
+##Background
+
+In this project, The goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. Subjects were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+Data Source: http://groupware.les.inf.puc-rio.br/har.
+
+##Analysis
+
+###Loading required packages for the analysis
+```{r lib}
+library(caret)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+
+# setting the seed for reproduceability
+set.seed(12345)
+```
+
+###Loading datasets and cleaning
+
+```{r load_clean}
+# Loading the training set and replacing all missing with "NA"
+trainingset <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!", ""))
+
+# Loading the test set 
+testingset <- read.csv('pml-testing.csv', na.strings=c("NA","#DIV/0!", ""))
+
+# Checking dimensions for number of variables and number of observations
+dim(trainingset)
+dim(testingset)
+
+# Deleting columns with all missing values
+trainingset<-trainingset[,colSums(is.na(trainingset)) == 0]
+testingset <-testingset[,colSums(is.na(testingset)) == 0]
+
+# Deleting variables that are not relevant for analysis
+trainingset <-trainingset[,-c(1:7)]
+testingset  <-testingset[,-c(1:7)]
+```
+
+### Partitioning for cross-validation
+
+```{r partition}
+subsamples <- createDataPartition(y=trainingset$classe, p=0.70, list=FALSE)
+subTraining <- trainingset[subsamples, ] 
+subTesting <- trainingset[-subsamples, ]
+
+plot(subTraining$classe, col="gray", main="Distribution of classe in the Training data set", xlab="classe levels", ylab="Frequency")
+```
+
+This bar chart shows that each level has sufficient records, Level A is the most frequent with more than 4000 records. Level D is the least frequent with about 2500 records.
+
+##Model1: Decision Tree
+```{r dtree}
+model1 <- rpart(classe ~ ., data=subTraining, method="class")
+
+# Predicting
+prediction1 <- predict(model1, subTesting, type = "class")
+
+# Plottinh the Decision Tree
+rpart.plot(model1, main="Classification Tree", extra=102, under=TRUE, faclen=0)
+
+# Testing results (on Test data)
+conf1 <- confusionMatrix(prediction1, subTesting$classe)
+conf1
+
+# Accuracy of the Model
+conf1$overall[1]
+```
+
+##Model2: Random Forest
+```{r rf}
+
+# instruct train to use 3-fold CV to select optimal tuning parameters
+model2 <- randomForest(classe ~. , data=subTraining, method="RF")
+
+# Looking at the Variable Imortance:
+varImp(model2)
+
+# Predicting
+prediction2 <- predict(model2, subTesting, type = "class")
+
+# Testing results (on Test data)
+conf2 <- confusionMatrix(prediction2, subTesting$classe)
+conf2
+
+# Accuracy of the Model
+conf2$overall[1]
+
+```
+
+As expected, Random Forest algorithm performed better than Decision Trees.
+Accuracy for Random Forest model is 0.992 (95% CI: (0.989, 0.994)) compared to 0.722 (95% CI: (0.7104, 0.7334)) for Decision Tree model. 
+
+###The Random Forest Model is finalized. The test set will be scored using model2.
+
+
+##Results of Test Set
+
+```{r test_score}
+answers <- predict(model2, testingset)
+answers
+
+write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=F,row.names=F,col.names=F)
+  }
+}
+
+write_files(answers)
+```
